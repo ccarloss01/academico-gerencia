@@ -104,19 +104,34 @@ jobs:
 
     steps:
       - name: Deploy auth-service
+        env:
+          HOOK: ${{ secrets.RENDER_HOOK_AUTH }}
         run: |
-          curl -s --fail -X POST "${{ secrets.RENDER_HOOK_AUTH }}" \
-            -d "imageUrl=${{ env.IMAGE_PREFIX }}/auth-service:${{ needs.version.outputs.new_tag }}"
+          if [ -z "$HOOK" ]; then
+            echo "RENDER_HOOK_AUTH não configurado — pulando deploy"
+          else
+            curl -s --fail -X POST "$HOOK"
+          fi
 
       - name: Deploy academic-service
+        env:
+          HOOK: ${{ secrets.RENDER_HOOK_ACADEMIC }}
         run: |
-          curl -s --fail -X POST "${{ secrets.RENDER_HOOK_ACADEMIC }}" \
-            -d "imageUrl=${{ env.IMAGE_PREFIX }}/academic-service:${{ needs.version.outputs.new_tag }}"
+          if [ -z "$HOOK" ]; then
+            echo "RENDER_HOOK_ACADEMIC não configurado — pulando deploy"
+          else
+            curl -s --fail -X POST "$HOOK"
+          fi
 
       - name: Deploy assignment-service
+        env:
+          HOOK: ${{ secrets.RENDER_HOOK_ASSIGNMENT }}
         run: |
-          curl -s --fail -X POST "${{ secrets.RENDER_HOOK_ASSIGNMENT }}" \
-            -d "imageUrl=${{ env.IMAGE_PREFIX }}/assignment-service:${{ needs.version.outputs.new_tag }}"
+          if [ -z "$HOOK" ]; then
+            echo "RENDER_HOOK_ASSIGNMENT não configurado — pulando deploy"
+          else
+            curl -s --fail -X POST "$HOOK"
+          fi
 
   # ────────────────────────────────────────────────────────────────────────
   # 4. Criar GitHub Release com changelog automático

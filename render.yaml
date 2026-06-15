@@ -58,11 +58,7 @@ services:
           name: academic-db
           property: connectionString
       - key: AUTH_SERVICE_URL
-        fromService:
-          name: auth-service
-          type: web
-          property: host
-          envVarKey: AUTH_SERVICE_URL
+        sync: false              # preencher no dashboard após o primeiro deploy
       - key: PORT
         value: "3002"
       - key: NODE_ENV
@@ -82,17 +78,9 @@ services:
           name: assignment-db
           property: connectionString
       - key: AUTH_SERVICE_URL
-        fromService:
-          name: auth-service
-          type: web
-          property: host
-          envVarKey: AUTH_SERVICE_URL
+        sync: false              # preencher no dashboard após o primeiro deploy
       - key: ACADEMIC_SERVICE_URL
-        fromService:
-          name: academic-service
-          type: web
-          property: host
-          envVarKey: ACADEMIC_SERVICE_URL
+        sync: false              # preencher no dashboard após o primeiro deploy
       - key: PORT
         value: "3003"
       - key: NODE_ENV
@@ -109,20 +97,8 @@ services:
         - plataforma/frontend/**
     envVars:
       - key: VITE_AUTH_URL
-        fromService:
-          name: auth-service
-          type: web
-          property: host
-          envVarKey: VITE_AUTH_URL
+        sync: false              # preencher no dashboard após o primeiro deploy
       - key: VITE_ACADEMIC_URL
-        fromService:
-          name: academic-service
-          type: web
-          property: host
-          envVarKey: VITE_ACADEMIC_URL
+        sync: false              # preencher no dashboard após o primeiro deploy
       - key: VITE_ASSIGNMENT_URL
-        fromService:
-          name: assignment-service
-          type: web
-          property: host
-          envVarKey: VITE_ASSIGNMENT_URL
+        sync: false              # preencher no dashboard após o primeiro deploy
