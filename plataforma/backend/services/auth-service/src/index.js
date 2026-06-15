@@ -1,17 +1,12 @@
 require('dotenv').config();
 const express = require('express');
+const cors = require('cors');
 const { init } = require('./db');
 const { register, metricsMiddleware } = require('./metrics');
 
 const app = express();
+app.use(cors());
 app.use(express.json());
-app.use((req, res, next) => {
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'GET,POST,PUT,PATCH,DELETE,OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type,Authorization');
-  if (req.method === 'OPTIONS') return res.sendStatus(204);
-  next();
-});
 
 app.use(metricsMiddleware);
 
