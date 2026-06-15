@@ -1,0 +1,148 @@
+services:
+  # ── Bancos de dados isolados por serviço ──────────────────────────────────
+
+  postgres-auth:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: pguser
+      POSTGRES_PASSWORD: pgpass
+      POSTGRES_DB: auth_db
+    ports:
+      - "5433:5432"
+    volumes:
+      - pgdata-auth:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U pguser -d auth_db"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  postgres-academic:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: pguser
+      POSTGRES_PASSWORD: pgpass
+      POSTGRES_DB: academic_db
+    ports:
+      - "5434:5432"
+    volumes:
+      - pgdata-academic:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U pguser -d academic_db"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  postgres-assignment:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: pguser
+      POSTGRES_PASSWORD: pgpass
+      POSTGRES_DB: assignment_db
+    ports:
+      - "5435:5432"
+    volumes:
+      - pgdata-assignment:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U pguser -d assignment_db"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # ── Serviços ──────────────────────────────────────────────────────────────
+
+  auth-service:
+    build: ../backend/services/auth-service
+    ports:
+      - "3001:3001"
+    environment:
+      DATABASE_URL: postgres://pguser:pgpass@postgres-auth:5432/auth_db
+      JWT_SECRET: dev-jwt-secret-troque-em-producao
+      PORT: 3001
+    depends_on:
+      postgres-auth:
+        condition: service_healthy
+
+  academic-service:
+    build: ../backend/services/academic-service
+    ports:
+      - "3002:3002"
+    environment:
+      DATABASE_URL: postgres://pguser:pgpass@postgres-academic:5432/academic_db
+      AUTH_SERVICE_URL: http://auth-service:3001
+      PORT: 3002
+    depends_on:
+      postgres-academic:
+        condition: service_healthy
+      auth-service:
+        condition: service_started
+
+  assignment-service:
+    build: ../backend/services/assignment-service
+    ports:
+      - "3003:3003"
+    environment:
+      DATABASE_URL: postgres://pguser:pgpass@postgres-assignment:5432/assignment_db
+      AUTH_SERVICE_URL: http://auth-service:3001
+      ACADEMIC_SERVICE_URL: http://academic-service:3002
+      PORT: 3003
+    depends_on:
+      postgres-assignment:
+        condition: service_healthy
+      auth-service:
+        condition: service_started
+      academic-service:
+        condition: service_started
+
+  frontend:
+    build:
+      context: ../frontend
+      args:
+        VITE_AUTH_URL: http://localhost:3001
+        VITE_ACADEMIC_URL: http://localhost:3002
+        VITE_ASSIGNMENT_URL: http://localhost:3003
+    ports:
+      - "8080:80"
+    depends_on:
+      - auth-service
+      - academic-service
+      - assignment-service
+
+  # ── Observabilidade ───────────────────────────────────────────────────────
+
+  prometheus:
+    image: prom/prometheus:v2.52.0
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - promdata:/prometheus
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.retention.time=7d
+    depends_on:
+      - auth-service
+      - academic-service
+      - assignment-service
+
+  grafana:
+    image: grafana/grafana:11.0.0
+    ports:
+      - "3000:3000"
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: admin
+      GF_USERS_ALLOW_SIGN_UP: "false"
+    volumes:
+      - ./grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./grafana/dashboards:/var/lib/grafana/dashboards:ro
+      - grafanadata:/var/lib/grafana
+    depends_on:
+      - prometheus
+
+volumes:
+  pgdata-auth:
+  pgdata-academic:
+  pgdata-assignment:
+  promdata:
+  grafanadata:
