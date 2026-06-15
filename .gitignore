@@ -1,0 +1,33 @@
+# Dependências
+node_modules/
+
+# Variáveis de ambiente
+.env
+.env.local
+.env.*.local
+
+# Logs
+*.log
+npm-debug.log*
+
+# Build do frontend
+dist/
+build/
+
+# Cobertura de testes
+coverage/
+
+# Sistema operacional
+.DS_Store
+Thumbs.db
+
+# IDEs
+.vscode/
+.idea/
+
+# Docker
+*.env.docker
+
+# Prometheus e Grafana (dados persistidos localmente)
+plataforma/infra/prometheus/data/
+plataforma/infra/grafana/data/
