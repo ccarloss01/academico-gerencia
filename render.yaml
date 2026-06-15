@@ -1,0 +1,128 @@
+# render.yaml — Blueprint da Plataforma Acadêmica
+# Documentação: https://render.com/docs/blueprint-spec
+#
+# Pré-requisitos:
+#   1. Criar um projeto no Render e conectar este repositório
+#   2. Adicionar as variáveis secretas (JWT_SECRET) manualmente no dashboard
+#   3. Os Deploy Hooks de cada serviço devem ser adicionados como GitHub Secrets:
+#      RENDER_HOOK_AUTH, RENDER_HOOK_ACADEMIC, RENDER_HOOK_ASSIGNMENT
+
+databases:
+  - name: auth-db
+    databaseName: auth_db
+    user: pguser
+    plan: starter            # plano pago; use "free" apenas para prototipagem
+
+  - name: academic-db
+    databaseName: academic_db
+    user: pguser
+    plan: starter
+
+  - name: assignment-db
+    databaseName: assignment_db
+    user: pguser
+    plan: starter
+
+services:
+  # ── auth-service ──────────────────────────────────────────────────────
+  - type: web
+    name: auth-service
+    env: docker
+    dockerfilePath: ./plataforma/backend/services/auth-service/Dockerfile
+    dockerContext: ./plataforma/backend/services/auth-service
+    plan: starter
+    healthCheckPath: /health
+    envVars:
+      - key: DATABASE_URL
+        fromDatabase:
+          name: auth-db
+          property: connectionString
+      - key: JWT_SECRET
+        sync: false          # definir manualmente no dashboard do Render
+      - key: PORT
+        value: "3001"
+      - key: NODE_ENV
+        value: production
+
+  # ── academic-service ──────────────────────────────────────────────────
+  - type: web
+    name: academic-service
+    env: docker
+    dockerfilePath: ./plataforma/backend/services/academic-service/Dockerfile
+    dockerContext: ./plataforma/backend/services/academic-service
+    plan: starter
+    healthCheckPath: /health
+    envVars:
+      - key: DATABASE_URL
+        fromDatabase:
+          name: academic-db
+          property: connectionString
+      - key: AUTH_SERVICE_URL
+        fromService:
+          name: auth-service
+          type: web
+          property: host
+          envVarKey: AUTH_SERVICE_URL
+      - key: PORT
+        value: "3002"
+      - key: NODE_ENV
+        value: production
+
+  # ── assignment-service ────────────────────────────────────────────────
+  - type: web
+    name: assignment-service
+    env: docker
+    dockerfilePath: ./plataforma/backend/services/assignment-service/Dockerfile
+    dockerContext: ./plataforma/backend/services/assignment-service
+    plan: starter
+    healthCheckPath: /health
+    envVars:
+      - key: DATABASE_URL
+        fromDatabase:
+          name: assignment-db
+          property: connectionString
+      - key: AUTH_SERVICE_URL
+        fromService:
+          name: auth-service
+          type: web
+          property: host
+          envVarKey: AUTH_SERVICE_URL
+      - key: ACADEMIC_SERVICE_URL
+        fromService:
+          name: academic-service
+          type: web
+          property: host
+          envVarKey: ACADEMIC_SERVICE_URL
+      - key: PORT
+        value: "3003"
+      - key: NODE_ENV
+        value: production
+
+  # ── frontend (SPA via static site) ───────────────────────────────────
+  - type: web
+    name: frontend
+    env: static
+    buildCommand: npm install && npm run build
+    staticPublishPath: ./plataforma/frontend/dist
+    buildFilter:
+      paths:
+        - plataforma/frontend/**
+    envVars:
+      - key: VITE_AUTH_URL
+        fromService:
+          name: auth-service
+          type: web
+          property: host
+          envVarKey: VITE_AUTH_URL
+      - key: VITE_ACADEMIC_URL
+        fromService:
+          name: academic-service
+          type: web
+          property: host
+          envVarKey: VITE_ACADEMIC_URL
+      - key: VITE_ASSIGNMENT_URL
+        fromService:
+          name: assignment-service
+          type: web
+          property: host
+          envVarKey: VITE_ASSIGNMENT_URL

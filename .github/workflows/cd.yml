@@ -1,0 +1,136 @@
+name: CD
+
+on:
+  push:
+    branches: [main]
+
+# Roda apenas após o CI passar
+# Para PR: CI bloqueia merge; ao chegar ao main, CD assume.
+
+concurrency:
+  group: cd-main
+  cancel-in-progress: false   # nunca cancelar um deploy em andamento
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_PREFIX: ghcr.io/${{ github.repository_owner }}
+
+jobs:
+  # ────────────────────────────────────────────────────────────────────────
+  # 1. Versionamento semântico automático via Conventional Commits
+  #    feat: → minor  |  fix: → patch  |  BREAKING CHANGE → major
+  # ────────────────────────────────────────────────────────────────────────
+  version:
+    name: Versionamento automático
+    runs-on: ubuntu-latest
+    outputs:
+      new_tag: ${{ steps.tag.outputs.new_tag }}
+      changelog: ${{ steps.tag.outputs.changelog }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0   # necessário para calcular versão desde a última tag
+
+      - name: Gerar tag semântica
+        id: tag
+        uses: mathieudutour/github-tag-action@v6.2
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          default_bump: patch
+          release_branches: main
+          tag_prefix: v
+
+  # ────────────────────────────────────────────────────────────────────────
+  # 2. Build e push das imagens para o GitHub Container Registry
+  # ────────────────────────────────────────────────────────────────────────
+  build-push:
+    name: Build & push — ${{ matrix.service }}
+    runs-on: ubuntu-latest
+    needs: version
+    strategy:
+      matrix:
+        service:
+          - auth-service
+          - academic-service
+          - assignment-service
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Login no GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Metadados da imagem
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.IMAGE_PREFIX }}/${{ matrix.service }}
+          tags: |
+            type=raw,value=${{ needs.version.outputs.new_tag }}
+            type=raw,value=latest
+
+      - name: Build cache (buildx)
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build e push
+        uses: docker/build-push-action@v6
+        with:
+          context: plataforma/backend/services/${{ matrix.service }}
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  # ────────────────────────────────────────────────────────────────────────
+  # 3. Deploy no Render via Deploy Hooks
+  #    Configure os hooks em: Render Dashboard → Service → Settings → Deploy Hook
+  #    Adicione como secrets: RENDER_HOOK_AUTH, RENDER_HOOK_ACADEMIC, RENDER_HOOK_ASSIGNMENT
+  # ────────────────────────────────────────────────────────────────────────
+  deploy:
+    name: Deploy no Render
+    runs-on: ubuntu-latest
+    needs: [version, build-push]
+    environment: production
+
+    steps:
+      - name: Deploy auth-service
+        run: |
+          curl -s --fail -X POST "${{ secrets.RENDER_HOOK_AUTH }}" \
+            -d "imageUrl=${{ env.IMAGE_PREFIX }}/auth-service:${{ needs.version.outputs.new_tag }}"
+
+      - name: Deploy academic-service
+        run: |
+          curl -s --fail -X POST "${{ secrets.RENDER_HOOK_ACADEMIC }}" \
+            -d "imageUrl=${{ env.IMAGE_PREFIX }}/academic-service:${{ needs.version.outputs.new_tag }}"
+
+      - name: Deploy assignment-service
+        run: |
+          curl -s --fail -X POST "${{ secrets.RENDER_HOOK_ASSIGNMENT }}" \
+            -d "imageUrl=${{ env.IMAGE_PREFIX }}/assignment-service:${{ needs.version.outputs.new_tag }}"
+
+  # ────────────────────────────────────────────────────────────────────────
+  # 4. Criar GitHub Release com changelog automático
+  # ────────────────────────────────────────────────────────────────────────
+  release:
+    name: GitHub Release
+    runs-on: ubuntu-latest
+    needs: [version, deploy]
+    permissions:
+      contents: write
+
+    steps:
+      - name: Criar release
+        uses: ncipollo/release-action@v1
+        with:
+          tag: ${{ needs.version.outputs.new_tag }}
+          name: Release ${{ needs.version.outputs.new_tag }}
+          body: ${{ needs.version.outputs.changelog }}
+          token: ${{ secrets.GITHUB_TOKEN }}
