@@ -3,25 +3,15 @@
 #
 # Pré-requisitos:
 #   1. Criar um projeto no Render e conectar este repositório
-#   2. Adicionar as variáveis secretas (JWT_SECRET) manualmente no dashboard
-#   3. Os Deploy Hooks de cada serviço devem ser adicionados como GitHub Secrets:
+#   2. Após o primeiro deploy, preencher as variáveis marcadas com sync:false
+#   3. Copiar os Deploy Hooks de cada serviço para os secrets do GitHub:
 #      RENDER_HOOK_AUTH, RENDER_HOOK_ACADEMIC, RENDER_HOOK_ASSIGNMENT
 
 databases:
-  - name: auth-db
-    databaseName: auth_db
+  - name: academico-db
+    databaseName: academico_db
     user: pguser
-    plan: starter            # plano pago; use "free" apenas para prototipagem
-
-  - name: academic-db
-    databaseName: academic_db
-    user: pguser
-    plan: starter
-
-  - name: assignment-db
-    databaseName: assignment_db
-    user: pguser
-    plan: starter
+    plan: free
 
 services:
   # ── auth-service ──────────────────────────────────────────────────────
@@ -30,12 +20,12 @@ services:
     env: docker
     dockerfilePath: ./plataforma/backend/services/auth-service/Dockerfile
     dockerContext: ./plataforma/backend/services/auth-service
-    plan: starter
+    plan: free
     healthCheckPath: /health
     envVars:
       - key: DATABASE_URL
         fromDatabase:
-          name: auth-db
+          name: academico-db
           property: connectionString
       - key: JWT_SECRET
         sync: false          # definir manualmente no dashboard do Render
@@ -50,15 +40,15 @@ services:
     env: docker
     dockerfilePath: ./plataforma/backend/services/academic-service/Dockerfile
     dockerContext: ./plataforma/backend/services/academic-service
-    plan: starter
+    plan: free
     healthCheckPath: /health
     envVars:
       - key: DATABASE_URL
         fromDatabase:
-          name: academic-db
+          name: academico-db
           property: connectionString
       - key: AUTH_SERVICE_URL
-        sync: false              # preencher no dashboard após o primeiro deploy
+        sync: false          # preencher com a URL do auth-service após o primeiro deploy
       - key: PORT
         value: "3002"
       - key: NODE_ENV
@@ -70,17 +60,17 @@ services:
     env: docker
     dockerfilePath: ./plataforma/backend/services/assignment-service/Dockerfile
     dockerContext: ./plataforma/backend/services/assignment-service
-    plan: starter
+    plan: free
     healthCheckPath: /health
     envVars:
       - key: DATABASE_URL
         fromDatabase:
-          name: assignment-db
+          name: academico-db
           property: connectionString
       - key: AUTH_SERVICE_URL
-        sync: false              # preencher no dashboard após o primeiro deploy
+        sync: false          # preencher com a URL do auth-service após o primeiro deploy
       - key: ACADEMIC_SERVICE_URL
-        sync: false              # preencher no dashboard após o primeiro deploy
+        sync: false          # preencher com a URL do academic-service após o primeiro deploy
       - key: PORT
         value: "3003"
       - key: NODE_ENV
@@ -90,15 +80,15 @@ services:
   - type: web
     name: frontend
     env: static
-    buildCommand: npm install && npm run build
+    buildCommand: cd plataforma/frontend && npm install && npm run build
     staticPublishPath: ./plataforma/frontend/dist
     buildFilter:
       paths:
         - plataforma/frontend/**
     envVars:
       - key: VITE_AUTH_URL
-        sync: false              # preencher no dashboard após o primeiro deploy
+        sync: false          # preencher com a URL do auth-service após o primeiro deploy
       - key: VITE_ACADEMIC_URL
-        sync: false              # preencher no dashboard após o primeiro deploy
+        sync: false          # preencher com a URL do academic-service após o primeiro deploy
       - key: VITE_ASSIGNMENT_URL
-        sync: false              # preencher no dashboard após o primeiro deploy
+        sync: false          # preencher com a URL do assignment-service após o primeiro deploy

@@ -1,50 +1,18 @@
 services:
-  # ── Bancos de dados isolados por serviço ──────────────────────────────────
+  # ── Banco de dados único compartilhado ───────────────────────────────────
 
-  postgres-auth:
+  postgres:
     image: postgres:16-alpine
     environment:
       POSTGRES_USER: pguser
       POSTGRES_PASSWORD: pgpass
-      POSTGRES_DB: auth_db
+      POSTGRES_DB: academico_db
     ports:
-      - "5433:5432"
+      - "5432:5432"
     volumes:
-      - pgdata-auth:/var/lib/postgresql/data
+      - pgdata:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U pguser -d auth_db"]
-      interval: 5s
-      timeout: 5s
-      retries: 5
-
-  postgres-academic:
-    image: postgres:16-alpine
-    environment:
-      POSTGRES_USER: pguser
-      POSTGRES_PASSWORD: pgpass
-      POSTGRES_DB: academic_db
-    ports:
-      - "5434:5432"
-    volumes:
-      - pgdata-academic:/var/lib/postgresql/data
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U pguser -d academic_db"]
-      interval: 5s
-      timeout: 5s
-      retries: 5
-
-  postgres-assignment:
-    image: postgres:16-alpine
-    environment:
-      POSTGRES_USER: pguser
-      POSTGRES_PASSWORD: pgpass
-      POSTGRES_DB: assignment_db
-    ports:
-      - "5435:5432"
-    volumes:
-      - pgdata-assignment:/var/lib/postgresql/data
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U pguser -d assignment_db"]
+      test: ["CMD-SHELL", "pg_isready -U pguser -d academico_db"]
       interval: 5s
       timeout: 5s
       retries: 5
@@ -56,11 +24,11 @@ services:
     ports:
       - "3001:3001"
     environment:
-      DATABASE_URL: postgres://pguser:pgpass@postgres-auth:5432/auth_db
+      DATABASE_URL: postgres://pguser:pgpass@postgres:5432/academico_db
       JWT_SECRET: dev-jwt-secret-troque-em-producao
       PORT: 3001
     depends_on:
-      postgres-auth:
+      postgres:
         condition: service_healthy
 
   academic-service:
@@ -68,11 +36,11 @@ services:
     ports:
       - "3002:3002"
     environment:
-      DATABASE_URL: postgres://pguser:pgpass@postgres-academic:5432/academic_db
+      DATABASE_URL: postgres://pguser:pgpass@postgres:5432/academico_db
       AUTH_SERVICE_URL: http://auth-service:3001
       PORT: 3002
     depends_on:
-      postgres-academic:
+      postgres:
         condition: service_healthy
       auth-service:
         condition: service_started
@@ -82,12 +50,12 @@ services:
     ports:
       - "3003:3003"
     environment:
-      DATABASE_URL: postgres://pguser:pgpass@postgres-assignment:5432/assignment_db
+      DATABASE_URL: postgres://pguser:pgpass@postgres:5432/academico_db
       AUTH_SERVICE_URL: http://auth-service:3001
       ACADEMIC_SERVICE_URL: http://academic-service:3002
       PORT: 3003
     depends_on:
-      postgres-assignment:
+      postgres:
         condition: service_healthy
       auth-service:
         condition: service_started
@@ -141,8 +109,6 @@ services:
       - prometheus
 
 volumes:
-  pgdata-auth:
-  pgdata-academic:
-  pgdata-assignment:
+  pgdata:
   promdata:
   grafanadata:
