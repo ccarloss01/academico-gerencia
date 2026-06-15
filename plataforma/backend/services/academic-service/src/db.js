@@ -2,9 +2,14 @@ const { Pool } = require('pg');
 
 const pool = new Pool({ connectionString: process.env.DATABASE_URL });
 
+pool.on('connect', (client) => {
+  client.query('SET search_path TO academic');
+});
+
 async function init() {
+  await pool.query('CREATE SCHEMA IF NOT EXISTS academic');
   await pool.query(`
-    CREATE TABLE IF NOT EXISTS professores (
+    CREATE TABLE IF NOT EXISTS academic.professores (
       id            SERIAL PRIMARY KEY,
       user_id       INT UNIQUE NOT NULL,
       nome          TEXT NOT NULL DEFAULT '',
@@ -12,10 +17,10 @@ async function init() {
       departamento  TEXT NOT NULL
     )
   `);
-  await pool.query(`ALTER TABLE professores ADD COLUMN IF NOT EXISTS nome TEXT NOT NULL DEFAULT ''`);
+  await pool.query(`ALTER TABLE academic.professores ADD COLUMN IF NOT EXISTS nome TEXT NOT NULL DEFAULT ''`);
 
   await pool.query(`
-    CREATE TABLE IF NOT EXISTS alunos (
+    CREATE TABLE IF NOT EXISTS academic.alunos (
       id        SERIAL PRIMARY KEY,
       user_id   INT UNIQUE NOT NULL,
       nome      TEXT NOT NULL DEFAULT '',
@@ -23,30 +28,30 @@ async function init() {
       curso     TEXT NOT NULL
     )
   `);
-  await pool.query(`ALTER TABLE alunos ADD COLUMN IF NOT EXISTS nome TEXT NOT NULL DEFAULT ''`);
+  await pool.query(`ALTER TABLE academic.alunos ADD COLUMN IF NOT EXISTS nome TEXT NOT NULL DEFAULT ''`);
 
   await pool.query(`
-    CREATE TABLE IF NOT EXISTS disciplinas (
+    CREATE TABLE IF NOT EXISTS academic.disciplinas (
       id             SERIAL PRIMARY KEY,
       nome           TEXT NOT NULL,
       codigo         TEXT UNIQUE NOT NULL,
       carga_horaria  INT NOT NULL,
-      professor_id   INT REFERENCES professores(id)
+      professor_id   INT REFERENCES academic.professores(id)
     )
   `);
   await pool.query(`
-    CREATE TABLE IF NOT EXISTS turmas (
+    CREATE TABLE IF NOT EXISTS academic.turmas (
       id             SERIAL PRIMARY KEY,
-      disciplina_id  INT NOT NULL REFERENCES disciplinas(id),
+      disciplina_id  INT NOT NULL REFERENCES academic.disciplinas(id),
       semestre       TEXT NOT NULL,
       horario        TEXT NOT NULL
     )
   `);
   await pool.query(`
-    CREATE TABLE IF NOT EXISTS matriculas (
+    CREATE TABLE IF NOT EXISTS academic.matriculas (
       id        SERIAL PRIMARY KEY,
-      aluno_id  INT NOT NULL REFERENCES alunos(id),
-      turma_id  INT NOT NULL REFERENCES turmas(id),
+      aluno_id  INT NOT NULL REFERENCES academic.alunos(id),
+      turma_id  INT NOT NULL REFERENCES academic.turmas(id),
       data      DATE NOT NULL DEFAULT CURRENT_DATE,
       status    TEXT NOT NULL DEFAULT 'ativa' CHECK (status IN ('ativa','trancada','concluida')),
       UNIQUE (aluno_id, turma_id)

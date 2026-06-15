@@ -2,9 +2,14 @@ const { Pool } = require('pg');
 
 const pool = new Pool({ connectionString: process.env.DATABASE_URL });
 
+pool.on('connect', (client) => {
+  client.query('SET search_path TO assignment');
+});
+
 async function init() {
+  await pool.query('CREATE SCHEMA IF NOT EXISTS assignment');
   await pool.query(`
-    CREATE TABLE IF NOT EXISTS atividades (
+    CREATE TABLE IF NOT EXISTS assignment.atividades (
       id        SERIAL PRIMARY KEY,
       turma_id  INT NOT NULL,
       titulo    TEXT NOT NULL,
@@ -13,9 +18,9 @@ async function init() {
     )
   `);
   await pool.query(`
-    CREATE TABLE IF NOT EXISTS entregas (
+    CREATE TABLE IF NOT EXISTS assignment.entregas (
       id           SERIAL PRIMARY KEY,
-      atividade_id INT NOT NULL REFERENCES atividades(id),
+      atividade_id INT NOT NULL REFERENCES assignment.atividades(id),
       aluno_id     INT NOT NULL,
       data_entrega TIMESTAMPTZ DEFAULT NOW(),
       nota         NUMERIC(5,2),
