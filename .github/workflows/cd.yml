@@ -94,7 +94,7 @@ jobs:
   # ────────────────────────────────────────────────────────────────────────
   # 3. Deploy no Render via Deploy Hooks
   #    Configure os hooks em: Render Dashboard → Service → Settings → Deploy Hook
-  #    Adicione como secrets: RENDER_HOOK_AUTH, RENDER_HOOK_ACADEMIC, RENDER_HOOK_ASSIGNMENT
+  #    Adicione como secrets: RENDER_HOOK_AUTH, RENDER_HOOK_ACADEMIC, RENDER_HOOK_ASSIGNMENT, RENDER_HOOK_FRONTEND
   # ────────────────────────────────────────────────────────────────────────
   deploy:
     name: Deploy no Render
@@ -129,6 +129,16 @@ jobs:
         run: |
           if [ -z "$HOOK" ]; then
             echo "RENDER_HOOK_ASSIGNMENT não configurado — pulando deploy"
+          else
+            curl -s --fail -X POST "$HOOK"
+          fi
+
+      - name: Deploy frontend
+        env:
+          HOOK: ${{ secrets.RENDER_HOOK_FRONTEND }}
+        run: |
+          if [ -z "$HOOK" ]; then
+            echo "RENDER_HOOK_FRONTEND não configurado — pulando deploy"
           else
             curl -s --fail -X POST "$HOOK"
           fi
