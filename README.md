@@ -19,7 +19,7 @@ Desenvolvido com Trunk-Based Development, CI/CD automatizado via GitHub Actions 
 
 ## Arquitetura do sistema
 
-A plataforma é composta por três microsserviços independentes, um frontend SPA e bancos de dados isolados por serviço (database-per-service pattern).
+A plataforma é composta por três microsserviços independentes, um frontend SPA e um banco de dados PostgreSQL único com schemas isolados por serviço.
 
 ```
 ┌─────────────────────────────────────────────────────────┐
@@ -45,11 +45,16 @@ A plataforma é composta por três microsserviços independentes, um frontend SP
        │
        ◄──── todos os serviços validam JWT aqui
        │
-┌──────┴───────┐ ┌──────────────┐ ┌──────────────────────┐
-│   auth_db    │ │ academic_db  │ │   assignment_db      │
-│  PostgreSQL  │ │  PostgreSQL  │ │     PostgreSQL        │
-│   :5433      │ │   :5434      │ │       :5435           │
-└──────────────┘ └──────────────┘ └──────────────────────┘
+┌──────┴──────────────────────────────────────────────────┐
+│              PostgreSQL — banco único: academico_db      │
+│                                                         │
+│   schema: auth        schema: academic   schema: assignment │
+│   • users             • professores      • atividades    │
+│                       • alunos           • entregas      │
+│                       • disciplinas                      │
+│                       • turmas                          │
+│                       • matriculas                      │
+└─────────────────────────────────────────────────────────┘
 ```
 
 ### Comunicação entre serviços
@@ -99,68 +104,35 @@ Professor                 assignment-service         academic-service
 Aluno                     assignment-service
     │                           │
     │── POST /atividades/1/entregas ──►│
-    │                           │── INSERT entregas         │
+    │                           │── INSERT entregas
     │◄── 201 { entrega } ───────│
 
 Professor                 assignment-service
     │                           │
     │── PATCH /entregas/1/nota ─►│
-    │                           │── UPDATE nota = 8.5       │
+    │                           │── UPDATE nota = 8.5
     │◄── 200 { entrega } ───────│
 ```
 
-### Modelo de dados (resumido)
+### Modelo de dados
 
 ```
-[usuarios]──────┐
-  id            │ auth_db
-  nome          │
-  email         │
-  senha_hash    │
-  tipo          │
-                │
-[professores]   │ academic_db
-  id            │
-  user_id ──────┘ (referência lógica, sem FK cross-db)
-  departamento
+schema: auth
+  users { id, nome, email, senha_hash, tipo }
 
-[alunos]        academic_db
-  id
-  user_id
-  matricula
-  curso
+schema: academic
+  professores { id, user_id*, nome, siape, departamento }
+  alunos      { id, user_id*, nome, matricula, curso }
+  disciplinas { id, nome, codigo, carga_horaria, professor_id }
+  turmas      { id, disciplina_id, semestre, horario }
+  matriculas  { id, aluno_id, turma_id, data, status }
 
-[disciplinas]   academic_db
-  id
-  nome
-  codigo
-  carga_horaria
+schema: assignment
+  atividades { id, turma_id*, titulo, descricao, prazo }
+  entregas   { id, atividade_id, aluno_id*, data_entrega, nota }
 
-[turmas]        academic_db
-  id
-  disciplina_id
-  professor_id
-  semestre
-  horario
-
-[matriculas]    academic_db
-  id
-  turma_id
-  aluno_id
-
-[atividades]    assignment_db
-  id
-  turma_id ── (validado via REST no academic-service)
-  titulo
-  descricao
-  prazo
-
-[entregas]      assignment_db
-  id
-  atividade_id
-  aluno_id
-  data_entrega
-  nota
+* referência lógica — sem FK cross-schema pois os serviços
+  se comunicam via REST em vez de joins diretos no banco
 ```
 
 ---
@@ -177,7 +149,7 @@ Professor                 assignment-service
 │  ┌──────────────┐  ┌──────────────┐  ┌──────────┐  │
 │  │ auth-service │  │  academic-   │  │assignment│  │
 │  │              │  │  service     │  │-service  │  │
-│  │ npm install  │  │ npm install  │  │npm install│  │
+│  │ npm install  │  │ npm install  │  │npm install│ │
 │  │ npm run lint │  │ npm run lint │  │npm run lint│ │
 │  │ npm test     │  │ npm test     │  │npm test  │  │
 │  │ npm audit    │  │ npm audit    │  │npm audit │  │
@@ -209,6 +181,7 @@ Professor                 assignment-service
 │                   └──────────┘                      │
 │                                                     │
 │  3. deploy ── curl Deploy Hooks do Render           │
+│     (auth, academic, assignment, frontend)          │
 │                                                     │
 │  4. release ── GitHub Release com changelog         │
 └─────────────────────────────────────────────────────┘
@@ -246,9 +219,26 @@ Basta conectar o repositório ao Render e ele provisionará tudo automaticamente
 2. Clique em **New → Blueprint**
 3. Conecte este repositório
 4. O Render lerá o `render.yaml` e criará:
-   - 3 bancos PostgreSQL (auth-db, academic-db, assignment-db)
+   - 1 banco PostgreSQL (`academico-db`) com plano free
    - 3 web services (auth-service, academic-service, assignment-service)
    - 1 site estático (frontend)
+
+> Os schemas `auth`, `academic` e `assignment` são criados automaticamente
+> na primeira inicialização de cada serviço.
+
+### Configurar variáveis manuais após o primeiro deploy
+
+Após o blueprint subir, preencha no dashboard do Render as variáveis marcadas como `sync: false`:
+
+| Serviço | Variável | Valor |
+|---|---|---|
+| auth-service | `JWT_SECRET` | string aleatória longa |
+| academic-service | `AUTH_SERVICE_URL` | URL do auth-service no Render |
+| assignment-service | `AUTH_SERVICE_URL` | URL do auth-service no Render |
+| assignment-service | `ACADEMIC_SERVICE_URL` | URL do academic-service no Render |
+| frontend | `VITE_AUTH_URL` | URL do auth-service no Render |
+| frontend | `VITE_ACADEMIC_URL` | URL do academic-service no Render |
+| frontend | `VITE_ASSIGNMENT_URL` | URL do assignment-service no Render |
 
 ### Configurar Deploy Hooks (para o CD automático)
 
@@ -267,21 +257,12 @@ gh secret set RENDER_HOOK_ACADEMIC   --repo ccarloss01/academico-gerencia \
 
 gh secret set RENDER_HOOK_ASSIGNMENT --repo ccarloss01/academico-gerencia \
   --body "https://api.render.com/deploy/srv-XXXX?key=XXXX"
+
+gh secret set RENDER_HOOK_FRONTEND   --repo ccarloss01/academico-gerencia \
+  --body "https://api.render.com/deploy/srv-XXXX?key=XXXX"
 ```
 
 A partir daí, todo merge na `main` dispara o CD e faz o deploy automaticamente.
-
-### Variáveis de ambiente por serviço
-
-Cada serviço lê as variáveis abaixo (o Render injeta `DATABASE_URL` automaticamente via render.yaml):
-
-| Variável | auth-service | academic-service | assignment-service |
-|---|---|---|---|
-| `DATABASE_URL` | ✓ (auth_db) | ✓ (academic_db) | ✓ (assignment_db) |
-| `JWT_SECRET` | ✓ | — | — |
-| `AUTH_SERVICE_URL` | — | `http://auth-service` | `http://auth-service` |
-| `ACADEMIC_SERVICE_URL` | — | — | `http://academic-service` |
-| `PORT` | 3001 | 3002 | 3003 |
 
 ---
 
@@ -296,6 +277,12 @@ Cada serviço lê as variáveis abaixo (o Render injeta `DATABASE_URL` automatic
 ```bash
 cd plataforma/infra
 docker compose up --build
+```
+
+Para resetar o banco (apagar todos os dados):
+
+```bash
+docker compose down -v && docker compose up --build
 ```
 
 Endpoints disponíveis:
@@ -341,31 +328,30 @@ curl -s -X POST http://localhost:3003/atividades \
 
 | Decisão | Escolha | Justificativa |
 |---|---|---|
-| **Linguagem backend** | Node.js + Express | Ecossistema maduro, boa performance para APIs REST, equipe familiarizada |
+| **Linguagem backend** | Node.js + Express | Ecossistema maduro, boa performance para APIs REST |
 | **Frontend** | React + Vite | Build rápido, SPA adequada para o perfil da aplicação |
 | **Banco de dados** | PostgreSQL | Relacional, suporta transações ACID, plano gratuito no Render |
-| **Padrão de banco** | Database-per-service | Isolamento de domínio, evita acoplamento via FK cross-service |
+| **Isolamento de dados** | Schema-per-service (dentro de 1 banco) | Isolamento lógico com banco único — compatível com Render free tier (1 banco por plano) |
 | **Autenticação** | JWT (Bearer token, 8h) | Stateless, fácil de validar entre serviços sem sessão centralizada |
 | **Comunicação entre serviços** | REST (HTTP direto) | Sem overhead de message broker para o volume atual; fácil de depurar |
 | **Hash de senha** | bcrypt (salt rounds 10) | Padrão da indústria, resistente a ataques de força bruta |
-| **Containers** | Docker + Compose | Ambiente reproduzível, isolamento de portas e volumes por serviço |
+| **Containers** | Docker + Compose | Ambiente reproduzível localmente com orquestração simples |
 | **CI** | GitHub Actions | Nativo ao GitHub, gratuito para repositórios públicos |
 | **Registry de imagens** | GHCR (ghcr.io) | Integrado ao GitHub, sem custo adicional |
 | **Deploy** | Render | Free tier com PostgreSQL gerenciado e Deploy Hooks |
 | **Versionamento** | Conventional Commits + bump automático | Versão semântica rastreável sem intervenção manual |
 | **Branch strategy** | Trunk-Based Development | Ciclos de integração curtos, menos conflitos de merge, deploy contínuo |
-| **Observabilidade** | Prometheus + Grafana (local) | Métricas RED (Rate, Errors, Duration) por serviço sem custo em produção |
+| **Observabilidade** | Prometheus + Grafana (apenas local) | Métricas RED por serviço via prom-client; não deployados no Render por ausência de disco persistente no plano free |
 
 ### Trade-offs relevantes
 
-**REST direto vs. API Gateway:** optou-se por comunicação direta entre serviços por simplicidade.
-Um gateway (Kong, Traefik) adicionaria roteamento centralizado e rate limiting, mas aumentaria a complexidade operacional desnecessariamente no estágio atual.
+**Schema-per-service vs. database-per-service:** a arquitetura original previa um banco por serviço, mas o Render free tier permite apenas 1 instância PostgreSQL. A solução foi usar schemas distintos (`auth`, `academic`, `assignment`) dentro do banco único `academico_db`. O isolamento lógico é mantido e os serviços não fazem queries entre schemas — a comunicação cross-service continua sendo via REST.
 
-**JWT sem refresh token (v1.0):** tokens expiram em 8h e o usuário precisa fazer login novamente.
-A implementação de refresh token com rotação está planejada para v2.0.
+**REST direto vs. API Gateway:** optou-se por comunicação direta entre serviços por simplicidade. Um gateway (Kong, Traefik) adicionaria roteamento centralizado e rate limiting, mas aumentaria a complexidade operacional desnecessariamente no estágio atual.
 
-**Prometheus local vs. Grafana Cloud:** Prometheus e Grafana rodam apenas no Docker Compose local.
-Em produção, o caminho natural é o Grafana Cloud (plano gratuito), que elimina a necessidade de disco persistente no Render.
+**JWT sem refresh token:** tokens expiram em 8h e o usuário precisa fazer login novamente. A implementação de refresh token com rotação está planejada para versões futuras.
+
+**Prometheus/Grafana local vs. Render:** Prometheus e Grafana rodam apenas no Docker Compose local pois o Render free tier não oferece disco persistente para web services. O Grafana Cloud (plano gratuito) é a alternativa natural para produção.
 
 ---
 
@@ -382,22 +368,46 @@ academico-gerencia/
 ├── plataforma/
 │   ├── backend/
 │   │   └── services/
-│   │       ├── auth-service/       # Autenticação JWT
+│   │       ├── auth-service/       # Autenticação JWT (schema: auth)
 │   │       │   ├── src/
 │   │       │   │   ├── index.js
+│   │       │   │   ├── db.js
 │   │       │   │   ├── metrics.js
-│   │       │   │   └── routes/
+│   │       │   │   ├── routes/auth.js
+│   │       │   │   └── tests/
 │   │       │   ├── Dockerfile
 │   │       │   └── package.json
-│   │       ├── academic-service/   # Entidades acadêmicas
-│   │       └── assignment-service/ # Atividades e entregas
+│   │       ├── academic-service/   # Entidades acadêmicas (schema: academic)
+│   │       │   ├── src/
+│   │       │   │   ├── index.js
+│   │       │   │   ├── db.js
+│   │       │   │   ├── metrics.js
+│   │       │   │   ├── middleware/auth.js
+│   │       │   │   ├── routes/
+│   │       │   │   └── tests/
+│   │       │   ├── Dockerfile
+│   │       │   └── package.json
+│   │       └── assignment-service/ # Atividades e entregas (schema: assignment)
+│   │           ├── src/
+│   │           │   ├── index.js
+│   │           │   ├── db.js
+│   │           │   ├── metrics.js
+│   │           │   ├── middleware/auth.js
+│   │           │   ├── routes/
+│   │           │   └── tests/
+│   │           ├── Dockerfile
+│   │           └── package.json
 │   ├── frontend/                   # SPA React + Vite
+│   │   ├── src/
+│   │   │   ├── api.js              # Cliente HTTP para os 3 serviços
+│   │   │   └── ...
+│   │   └── package.json
 │   └── infra/
-│       ├── docker-compose.yml
+│       ├── docker-compose.yml      # Orquestração local completa
 │       ├── prometheus/
-│       │   └── prometheus.yml
+│       │   └── prometheus.yml      # Scrape dos 3 serviços
 │       └── grafana/
-│           ├── provisioning/
+│           ├── provisioning/       # Datasource e dashboard automáticos
 │           └── dashboards/
 ├── render.yaml                     # Blueprint de deploy no Render
 └── README.md
