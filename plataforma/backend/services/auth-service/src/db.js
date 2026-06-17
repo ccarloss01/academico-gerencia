@@ -1,23 +1,21 @@
-const { Pool } = require('pg');
+const { createClient } = require('@libsql/client');
 
-const pool = new Pool({ connectionString: process.env.DATABASE_URL });
-
-pool.on('connect', (client) => {
-  client.query('SET search_path TO auth');
+const client = createClient({
+  url: process.env.TURSO_URL || 'file:./auth.db',
+  authToken: process.env.TURSO_AUTH_TOKEN,
 });
 
 async function init() {
-  await pool.query('CREATE SCHEMA IF NOT EXISTS auth');
-  await pool.query(`
-    CREATE TABLE IF NOT EXISTS auth.users (
-      id        SERIAL PRIMARY KEY,
-      nome      TEXT NOT NULL,
-      email     TEXT UNIQUE NOT NULL,
-      senha     TEXT NOT NULL,
-      tipo      TEXT NOT NULL CHECK (tipo IN ('aluno', 'professor')),
-      created_at TIMESTAMPTZ DEFAULT NOW()
+  await client.execute(`
+    CREATE TABLE IF NOT EXISTS users (
+      id         INTEGER PRIMARY KEY AUTOINCREMENT,
+      nome       TEXT NOT NULL,
+      email      TEXT UNIQUE NOT NULL,
+      senha      TEXT NOT NULL,
+      tipo       TEXT NOT NULL CHECK (tipo IN ('aluno', 'professor')),
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP
     )
   `);
 }
 
-module.exports = { pool, init };
+module.exports = { client, init };

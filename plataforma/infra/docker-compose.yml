@@ -1,66 +1,42 @@
 services:
-  # ── Banco de dados único compartilhado ───────────────────────────────────
-
-  postgres:
-    image: postgres:16-alpine
-    environment:
-      POSTGRES_USER: pguser
-      POSTGRES_PASSWORD: pgpass
-      POSTGRES_DB: academico_db
-    ports:
-      - "5432:5432"
-    volumes:
-      - pgdata:/var/lib/postgresql/data
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U pguser -d academico_db"]
-      interval: 5s
-      timeout: 5s
-      retries: 5
-
-  # ── Serviços ──────────────────────────────────────────────────────────────
-
   auth-service:
     build: ../backend/services/auth-service
     ports:
       - "3001:3001"
     environment:
-      DATABASE_URL: postgres://pguser:pgpass@postgres:5432/academico_db
+      TURSO_URL: file:/data/auth.db
       JWT_SECRET: dev-jwt-secret-troque-em-producao
       PORT: 3001
-    depends_on:
-      postgres:
-        condition: service_healthy
+    volumes:
+      - auth-data:/data
 
   academic-service:
     build: ../backend/services/academic-service
     ports:
       - "3002:3002"
     environment:
-      DATABASE_URL: postgres://pguser:pgpass@postgres:5432/academico_db
+      TURSO_URL: file:/data/academic.db
       AUTH_SERVICE_URL: http://auth-service:3001
       PORT: 3002
+    volumes:
+      - academic-data:/data
     depends_on:
-      postgres:
-        condition: service_healthy
-      auth-service:
-        condition: service_started
+      - auth-service
 
   assignment-service:
     build: ../backend/services/assignment-service
     ports:
       - "3003:3003"
     environment:
-      DATABASE_URL: postgres://pguser:pgpass@postgres:5432/academico_db
+      TURSO_URL: file:/data/assignment.db
       AUTH_SERVICE_URL: http://auth-service:3001
       ACADEMIC_SERVICE_URL: http://academic-service:3002
       PORT: 3003
+    volumes:
+      - assignment-data:/data
     depends_on:
-      postgres:
-        condition: service_healthy
-      auth-service:
-        condition: service_started
-      academic-service:
-        condition: service_started
+      - auth-service
+      - academic-service
 
   frontend:
     build:
@@ -75,8 +51,6 @@ services:
       - auth-service
       - academic-service
       - assignment-service
-
-  # ── Observabilidade ───────────────────────────────────────────────────────
 
   prometheus:
     image: prom/prometheus:v2.52.0
@@ -109,6 +83,8 @@ services:
       - prometheus
 
 volumes:
-  pgdata:
+  auth-data:
+  academic-data:
+  assignment-data:
   promdata:
   grafanadata:
