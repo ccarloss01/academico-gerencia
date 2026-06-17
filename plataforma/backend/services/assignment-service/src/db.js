@@ -1,32 +1,31 @@
-const { Pool } = require('pg');
+const { createClient } = require('@libsql/client');
 
-const pool = new Pool({ connectionString: process.env.DATABASE_URL });
-
-pool.on('connect', (client) => {
-  client.query('SET search_path TO assignment');
+const client = createClient({
+  url: process.env.TURSO_URL || 'file:./assignment.db',
+  authToken: process.env.TURSO_AUTH_TOKEN,
 });
 
 async function init() {
-  await pool.query('CREATE SCHEMA IF NOT EXISTS assignment');
-  await pool.query(`
-    CREATE TABLE IF NOT EXISTS assignment.atividades (
-      id        SERIAL PRIMARY KEY,
-      turma_id  INT NOT NULL,
+  await client.execute(`
+    CREATE TABLE IF NOT EXISTS atividades (
+      id        INTEGER PRIMARY KEY AUTOINCREMENT,
+      turma_id  INTEGER NOT NULL,
       titulo    TEXT NOT NULL,
       descricao TEXT,
-      prazo     TIMESTAMPTZ NOT NULL
+      prazo     TEXT NOT NULL
     )
   `);
-  await pool.query(`
-    CREATE TABLE IF NOT EXISTS assignment.entregas (
-      id           SERIAL PRIMARY KEY,
-      atividade_id INT NOT NULL REFERENCES assignment.atividades(id),
-      aluno_id     INT NOT NULL,
-      data_entrega TIMESTAMPTZ DEFAULT NOW(),
-      nota         NUMERIC(5,2),
+
+  await client.execute(`
+    CREATE TABLE IF NOT EXISTS entregas (
+      id           INTEGER PRIMARY KEY AUTOINCREMENT,
+      atividade_id INTEGER NOT NULL REFERENCES atividades(id),
+      aluno_id     INTEGER NOT NULL,
+      data_entrega TEXT DEFAULT CURRENT_TIMESTAMP,
+      nota         REAL,
       UNIQUE (atividade_id, aluno_id)
     )
   `);
 }
 
-module.exports = { pool, init };
+module.exports = { client, init };

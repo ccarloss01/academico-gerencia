@@ -1,20 +1,4 @@
-# render.yaml — Blueprint da Plataforma Acadêmica
-# Documentação: https://render.com/docs/blueprint-spec
-#
-# Pré-requisitos:
-#   1. Criar um projeto no Render e conectar este repositório
-#   2. Após o primeiro deploy, preencher as variáveis marcadas com sync:false
-#   3. Copiar os Deploy Hooks de cada serviço para os secrets do GitHub:
-#      RENDER_HOOK_AUTH, RENDER_HOOK_ACADEMIC, RENDER_HOOK_ASSIGNMENT
-
-databases:
-  - name: academico-db
-    databaseName: academico_db
-    user: pguser
-    plan: free
-
 services:
-  # ── auth-service ──────────────────────────────────────────────────────
   - type: web
     name: auth-service
     env: docker
@@ -23,18 +7,17 @@ services:
     plan: free
     healthCheckPath: /health
     envVars:
-      - key: DATABASE_URL
-        fromDatabase:
-          name: academico-db
-          property: connectionString
+      - key: TURSO_URL
+        sync: false
+      - key: TURSO_AUTH_TOKEN
+        sync: false
       - key: JWT_SECRET
-        sync: false          # definir manualmente no dashboard do Render
+        sync: false
       - key: PORT
         value: "3001"
       - key: NODE_ENV
         value: production
 
-  # ── academic-service ──────────────────────────────────────────────────
   - type: web
     name: academic-service
     env: docker
@@ -43,18 +26,17 @@ services:
     plan: free
     healthCheckPath: /health
     envVars:
-      - key: DATABASE_URL
-        fromDatabase:
-          name: academico-db
-          property: connectionString
+      - key: TURSO_URL
+        sync: false
+      - key: TURSO_AUTH_TOKEN
+        sync: false
       - key: AUTH_SERVICE_URL
-        sync: false          # preencher com a URL do auth-service após o primeiro deploy
+        sync: false
       - key: PORT
         value: "3002"
       - key: NODE_ENV
         value: production
 
-  # ── assignment-service ────────────────────────────────────────────────
   - type: web
     name: assignment-service
     env: docker
@@ -63,20 +45,19 @@ services:
     plan: free
     healthCheckPath: /health
     envVars:
-      - key: DATABASE_URL
-        fromDatabase:
-          name: academico-db
-          property: connectionString
+      - key: TURSO_URL
+        sync: false
+      - key: TURSO_AUTH_TOKEN
+        sync: false
       - key: AUTH_SERVICE_URL
-        sync: false          # preencher com a URL do auth-service após o primeiro deploy
+        sync: false
       - key: ACADEMIC_SERVICE_URL
-        sync: false          # preencher com a URL do academic-service após o primeiro deploy
+        sync: false
       - key: PORT
         value: "3003"
       - key: NODE_ENV
         value: production
 
-  # ── frontend (SPA via static site) ───────────────────────────────────
   - type: web
     name: frontend
     env: static
@@ -87,8 +68,8 @@ services:
         - plataforma/frontend/**
     envVars:
       - key: VITE_AUTH_URL
-        sync: false          # preencher com a URL do auth-service após o primeiro deploy
+        sync: false
       - key: VITE_ACADEMIC_URL
-        sync: false          # preencher com a URL do academic-service após o primeiro deploy
+        sync: false
       - key: VITE_ASSIGNMENT_URL
-        sync: false          # preencher com a URL do assignment-service após o primeiro deploy
+        sync: false

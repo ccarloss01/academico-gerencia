@@ -1,62 +1,60 @@
-const { Pool } = require('pg');
+const { createClient } = require('@libsql/client');
 
-const pool = new Pool({ connectionString: process.env.DATABASE_URL });
-
-pool.on('connect', (client) => {
-  client.query('SET search_path TO academic');
+const client = createClient({
+  url: process.env.TURSO_URL || 'file:./academic.db',
+  authToken: process.env.TURSO_AUTH_TOKEN,
 });
 
 async function init() {
-  await pool.query('CREATE SCHEMA IF NOT EXISTS academic');
-  await pool.query(`
-    CREATE TABLE IF NOT EXISTS academic.professores (
-      id            SERIAL PRIMARY KEY,
-      user_id       INT UNIQUE NOT NULL,
-      nome          TEXT NOT NULL DEFAULT '',
-      siape         TEXT UNIQUE NOT NULL,
-      departamento  TEXT NOT NULL
+  await client.execute(`
+    CREATE TABLE IF NOT EXISTS professores (
+      id           INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id      INTEGER UNIQUE NOT NULL,
+      nome         TEXT NOT NULL DEFAULT '',
+      siape        TEXT UNIQUE NOT NULL,
+      departamento TEXT NOT NULL
     )
   `);
-  await pool.query(`ALTER TABLE academic.professores ADD COLUMN IF NOT EXISTS nome TEXT NOT NULL DEFAULT ''`);
 
-  await pool.query(`
-    CREATE TABLE IF NOT EXISTS academic.alunos (
-      id        SERIAL PRIMARY KEY,
-      user_id   INT UNIQUE NOT NULL,
+  await client.execute(`
+    CREATE TABLE IF NOT EXISTS alunos (
+      id        INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id   INTEGER UNIQUE NOT NULL,
       nome      TEXT NOT NULL DEFAULT '',
       matricula TEXT UNIQUE NOT NULL,
       curso     TEXT NOT NULL
     )
   `);
-  await pool.query(`ALTER TABLE academic.alunos ADD COLUMN IF NOT EXISTS nome TEXT NOT NULL DEFAULT ''`);
 
-  await pool.query(`
-    CREATE TABLE IF NOT EXISTS academic.disciplinas (
-      id             SERIAL PRIMARY KEY,
-      nome           TEXT NOT NULL,
-      codigo         TEXT UNIQUE NOT NULL,
-      carga_horaria  INT NOT NULL,
-      professor_id   INT REFERENCES academic.professores(id)
+  await client.execute(`
+    CREATE TABLE IF NOT EXISTS disciplinas (
+      id            INTEGER PRIMARY KEY AUTOINCREMENT,
+      nome          TEXT NOT NULL,
+      codigo        TEXT UNIQUE NOT NULL,
+      carga_horaria INTEGER NOT NULL,
+      professor_id  INTEGER REFERENCES professores(id)
     )
   `);
-  await pool.query(`
-    CREATE TABLE IF NOT EXISTS academic.turmas (
-      id             SERIAL PRIMARY KEY,
-      disciplina_id  INT NOT NULL REFERENCES academic.disciplinas(id),
-      semestre       TEXT NOT NULL,
-      horario        TEXT NOT NULL
+
+  await client.execute(`
+    CREATE TABLE IF NOT EXISTS turmas (
+      id            INTEGER PRIMARY KEY AUTOINCREMENT,
+      disciplina_id INTEGER NOT NULL REFERENCES disciplinas(id),
+      semestre      TEXT NOT NULL,
+      horario       TEXT NOT NULL
     )
   `);
-  await pool.query(`
-    CREATE TABLE IF NOT EXISTS academic.matriculas (
-      id        SERIAL PRIMARY KEY,
-      aluno_id  INT NOT NULL REFERENCES academic.alunos(id),
-      turma_id  INT NOT NULL REFERENCES academic.turmas(id),
-      data      DATE NOT NULL DEFAULT CURRENT_DATE,
-      status    TEXT NOT NULL DEFAULT 'ativa' CHECK (status IN ('ativa','trancada','concluida')),
+
+  await client.execute(`
+    CREATE TABLE IF NOT EXISTS matriculas (
+      id       INTEGER PRIMARY KEY AUTOINCREMENT,
+      aluno_id INTEGER NOT NULL REFERENCES alunos(id),
+      turma_id INTEGER NOT NULL REFERENCES turmas(id),
+      data     TEXT NOT NULL DEFAULT (date('now')),
+      status   TEXT NOT NULL DEFAULT 'ativa' CHECK (status IN ('ativa','trancada','concluida')),
       UNIQUE (aluno_id, turma_id)
     )
   `);
 }
 
-module.exports = { pool, init };
+module.exports = { client, init };

@@ -1,8 +1,9 @@
-process.env.DATABASE_URL = 'postgres://fake';
+process.env.TURSO_URL = 'file::memory:';
 process.env.AUTH_SERVICE_URL = 'http://localhost:3001';
 process.env.ACADEMIC_SERVICE_URL = 'http://localhost:3002';
 
-jest.mock('../db', () => ({ pool: { query: jest.fn() }, init: jest.fn().mockResolvedValue() }));
+jest.mock('../db', () => ({ client: { execute: jest.fn() }, init: jest.fn().mockResolvedValue() }));
+
 jest.mock('axios');
 
 const request = require('supertest');
